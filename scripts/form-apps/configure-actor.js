@@ -12,6 +12,16 @@ import fd_ActorHelper from "../helpers/fd-actor-helper.js";
 const game_system_helper = new GAME_SYSTEM_Helper();
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+// ApplicationV2 inserts template HTML via parsing (non-executing).
+// Re-create inline <script> elements so their bodies run after render.
+export function executeInlineScripts(root) {
+    for (const s of root.querySelectorAll("script")) {
+        const ns = document.createElement("script");
+        ns.textContent = s.textContent;
+        s.replaceWith(ns);
+    }
+}
+
 Hooks.on('renderConfigureActor', () => {
     // Add dragstart listeners for each result element
     const dice_roller = new DiceRoller;
@@ -44,7 +54,7 @@ export class ConfigureActor extends HandlebarsApplicationMixin(ApplicationV2) {
             title: "RNCS.dialog.results-button.configure-new-actor"
         },
         position: {
-            width: 375,
+            width: 420,
             height: 610
         },
         form: {
@@ -71,6 +81,10 @@ export class ConfigureActor extends HandlebarsApplicationMixin(ApplicationV2) {
         this.DistributionMethod = DistributionMethod;
         this.HideResultsZone = HideResultsZone;
         this._settings = new RegisteredSettings;
+    }
+
+    _onRender(context, options) {
+        executeInlineScripts(this.element);
     }
 
     // Send data to Configure Actor form

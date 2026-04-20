@@ -1,4 +1,5 @@
 import { RNCS } from "./main.js";
+import { executeInlineScripts } from "./form-apps/configure-actor.js";
 export const settingsKey = "roll-new-character-stats";
 
 const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
@@ -422,6 +423,7 @@ class ChatSettings extends HandlebarsApplicationMixin(ApplicationV2) {
     }
 
     _onRender(context, options) {
+        executeInlineScripts(this.element);
         for (const group of this.element.querySelectorAll(".rncs-form-group")) {
             group.addEventListener("click", (event) => {
                 if (event.target.closest("#rncs_NoteFromDM, label[for='rncs_NoteFromDM']")) return;
@@ -521,6 +523,7 @@ class RollAndDistributionMethodSettings extends HandlebarsApplicationMixin(Appli
     }
 
     _onRender(context, options) {
+        executeInlineScripts(this.element);
         for (const group of this.element.querySelectorAll(".rncs-form-group")) {
             group.addEventListener("click", (event) => {
                 if (event.target.closest("#rncs_DistributionMethod, label[for='rncs_DistributionMethod']")) return;

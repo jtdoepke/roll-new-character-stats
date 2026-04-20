@@ -1,3 +1,9 @@
+  #configure-actor .window-content,
+  #rncs-chat-settings .window-content,
+  #rncs-roll-dist-method .window-content {
+    overflow: hidden auto;
+  }
+
   .rncs-results-header {
     padding-left: 7px !important;
     padding-right: 3px !important;
