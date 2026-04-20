@@ -46,50 +46,36 @@ async function onRenderActorDirectory(app, html) {
 	});
 }
 
-Hooks.on("renderChatMessageHTML", (app, html) => {
-	// Find buttons with class "rncs-configure-new-actor"
+Hooks.on("renderChatMessageHTML", (chatMessage, html) => {
+	// Hide Configure Actor buttons for users without ACTOR_CREATE
 	const buttons = html.querySelectorAll(".rncs-configure-new-actor");
 	if (!game.user.can("ACTOR_CREATE")) {
 		buttons.forEach(button => {
 			button.classList.add("rncs-display-none");
 		});
 	}
-});
 
-Hooks.on("renderChatMessage", (chatMessage, html, data) => {
-	// Check if the message is from RNCS
-	if (chatMessage.flags?.roll_new_character_stats) {
-		// Find the Configure Actor button
-		const configureButton = html.find(".rncs-configure-new-actor button[data-action='configure_new_actor']");
-		configureButton.on("click", (event) => {
-			event.preventDefault(); // Prevent default behavior
-			const msgId = chatMessage.id;
-			const flags = chatMessage.flags.roll_new_character_stats;
-
-			const owner_id = flags.owner_id;
-			const final_results = flags.final_results;
-			const bonus_points = flags.bonus_points;
-			const other_properties_results = flags.other_properties_results;
-			const individual_rolls = flags.individual_rolls;
-			const Over18Allowed = flags.Over18Allowed;
-			const HideResultsZone = flags.HideResultsZone;
-			const DistributionMethod = flags.DistributionMethod;
-
-			// Call the configure actor form
-			FormApp_ConfigureActor(
-				event.currentTarget,
-				msgId,
-				owner_id,
-				final_results,
-				bonus_points,
-				other_properties_results,
-				individual_rolls,
-				Over18Allowed,
-				HideResultsZone,
-				DistributionMethod
-			);
-		});
-	}
+	// Wire up the Configure Actor button click for RNCS chat messages
+	const flags = chatMessage.flags?.roll_new_character_stats;
+	if (!flags) return;
+	const configureButton = html.querySelector(
+		".rncs-configure-new-actor button[data-action='configure_new_actor']"
+	);
+	configureButton?.addEventListener("click", (event) => {
+		event.preventDefault();
+		FormApp_ConfigureActor(
+			event.currentTarget,
+			chatMessage.id,
+			flags.owner_id,
+			flags.final_results,
+			flags.bonus_points,
+			flags.other_properties_results,
+			flags.individual_rolls,
+			flags.Over18Allowed,
+			flags.HideResultsZone,
+			flags.DistributionMethod
+		);
+	});
 });
 
 Hooks.on("ready", () => {
@@ -170,14 +156,16 @@ async function FormApp_ConfigureActor(target,
 	// remove button? if not, don't disable either.
 	if (_settings.ChatRemoveConfigureActorButton) { RemoveButton(msgId); } else { target.disabled = false; }
 
-	new ConfigureActor(owner_id,
+	new ConfigureActor({
+		owner_id,
 		final_results,
 		bonus_points,
 		other_properties_results,
 		individual_rolls,
 		Over18Allowed,
 		DistributionMethod,
-		HideResultsZone).render(true);
+		HideResultsZone
+	}).render({ force: true });
 
 }
 
@@ -211,9 +199,11 @@ export async function RollStats() {
 		question = game.i18n.localize("RNCS.dialog.point-buy.Content").toString()
 	}
 
-	const confirmed = await Dialog.confirm({
-		title: title,
-		content: "<small>" + dice_roller.GetMethodText() + "<p>" + question + "</p></small>"
+	const confirmed = await foundry.applications.api.DialogV2.confirm({
+		window: { title },
+		content: "<small>" + dice_roller.GetMethodText() + "<p>" + question + "</p></small>",
+		rejectClose: false,
+		modal: true
 	});
 
 	if (confirmed) {

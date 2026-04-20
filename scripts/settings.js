@@ -1,6 +1,8 @@
 import { RNCS } from "./main.js";
 export const settingsKey = "roll-new-character-stats";
 
+const { ApplicationV2, HandlebarsApplicationMixin, DialogV2 } = foundry.applications.api;
+
 // ***********************************************************************************************
 //
 // MAKE SURE YOU ADD NEW SETTINGS TO ./registered-settings.js 
@@ -21,21 +23,18 @@ export function registerSettings() {
         config: false,
         default: "0.0.0",
         type: String,
-        onChange: () => {
+        onChange: async () => {
             if (!game.user.isGM || game.settings.get(RNCS.ID, "ForceDefaultSettings") === false) return;
-            new Dialog({
-                title: `RNCS | ${game.i18n.localize("RNCS.settings.version.title")}`,
+            await DialogV2.prompt({
+                window: { title: `RNCS | ${game.i18n.localize("RNCS.settings.version.title")}` },
                 content: game.i18n.localize("RNCS.settings.version.content"),
-                buttons: {
-                    yes: {
-                        label: game.i18n.localize("OK"),
-                        callback: () => {
-                            RNCS.restoreDefaultSettings();
-                        },
-                    },
+                ok: {
+                    label: game.i18n.localize("OK"),
+                    callback: () => RNCS.restoreDefaultSettings()
                 },
-                default: "yes",
-            }).render(true);
+                rejectClose: false,
+                modal: true
+            });
         },
     });
 
@@ -371,20 +370,28 @@ Hooks.on('renderChatSettings', () => {
     Intitialize();
 });
 
-class ChatSettings extends FormApplication {
+class ChatSettings extends HandlebarsApplicationMixin(ApplicationV2) {
 
-    static get defaultOptions() {
-        return foundry.utils.mergeObject(super.defaultOptions, {
-            id: "rncs-chat-settings",
-            title: "RNCS - Edit Chat Settings",
-            template: "./modules/roll-new-character-stats/templates/form-apps/edit-chat-settings.hbs",
-            width: 500, height: "auto",
+    static DEFAULT_OPTIONS = {
+        id: "rncs-chat-settings",
+        classes: ["rncs-settings-form"],
+        tag: "form",
+        window: { title: "RNCS - Edit Chat Settings" },
+        position: { width: 500, height: "auto" },
+        form: {
+            handler: ChatSettings.#onSubmit,
             closeOnSubmit: true,
-            submitOnClose: false
-        })
-    }
+            submitOnChange: false
+        }
+    };
 
-    async getData() {
+    static PARTS = {
+        body: {
+            template: "modules/roll-new-character-stats/templates/form-apps/edit-chat-settings.hbs"
+        }
+    };
+
+    async _prepareContext(options) {
         return {
             ChatRemoveConfigureActorButton_value: game.settings.get(settingsKey, "ChatRemoveConfigureActorButton"),
             ChatShowDescription_value: game.settings.get(settingsKey, "ChatShowDescription"),
@@ -399,37 +406,36 @@ class ChatSettings extends FormApplication {
         }
     }
 
-    async _updateObject(event, formData) {
-        if (event.submitter.id !== "cancel") {
-            game.settings.set(settingsKey, "ChatRemoveConfigureActorButton", formData.rncs_ChatRemoveConfigureActorButton),
-                game.settings.set(settingsKey, "ChatShowDescription", formData.rncs_ChatShowDescription),
-                game.settings.set(settingsKey, "ChatShowMethodText", formData.rncs_ChatShowMethodText),
-                game.settings.set(settingsKey, "ChatShowResultsText", formData.rncs_ChatShowResultsText),
-                game.settings.set(settingsKey, "ChatShowTotalAbilityScore", formData.rncs_ChatShowTotalAbilityScore),
-                game.settings.set(settingsKey, "ChatShowCondensedResults", formData.rncs_ChatShowCondensedResults),
-                game.settings.set(settingsKey, "ChatShowDieResultSet", formData.rncs_ChatShowDieResultSet),
-                game.settings.set(settingsKey, "ChatShowBonusPointsText", formData.rncs_ChatShowBonusPointsText),
-                game.settings.set(settingsKey, "ChatShowDifficultyText", formData.rncs_ChatShowDifficultyText),
-                game.settings.set(settingsKey, "ChatShowNoteFromDM", formData.rncs_ChatShowNoteFromDM)
-        }
+    static async #onSubmit(event, form, formData) {
+        if (event.submitter?.id === "cancel") return;
+        const data = formData.object;
+        await game.settings.set(settingsKey, "ChatRemoveConfigureActorButton", data.rncs_ChatRemoveConfigureActorButton);
+        await game.settings.set(settingsKey, "ChatShowDescription", data.rncs_ChatShowDescription);
+        await game.settings.set(settingsKey, "ChatShowMethodText", data.rncs_ChatShowMethodText);
+        await game.settings.set(settingsKey, "ChatShowResultsText", data.rncs_ChatShowResultsText);
+        await game.settings.set(settingsKey, "ChatShowTotalAbilityScore", data.rncs_ChatShowTotalAbilityScore);
+        await game.settings.set(settingsKey, "ChatShowCondensedResults", data.rncs_ChatShowCondensedResults);
+        await game.settings.set(settingsKey, "ChatShowDieResultSet", data.rncs_ChatShowDieResultSet);
+        await game.settings.set(settingsKey, "ChatShowBonusPointsText", data.rncs_ChatShowBonusPointsText);
+        await game.settings.set(settingsKey, "ChatShowDifficultyText", data.rncs_ChatShowDifficultyText);
+        await game.settings.set(settingsKey, "ChatShowNoteFromDM", data.rncs_ChatShowNoteFromDM);
     }
-    activateListeners(html) {
-        super.activateListeners(html);
-        html.find(".rncs-form-group").on("click", (event) => {
-            // Skip if clicking the text input or its label
-            if (event.target.closest("#rncs_NoteFromDM, label[for='rncs_NoteFromDM']")) {
-                return;
-            }
-            const checkbox = event.currentTarget.querySelector("input[type='checkbox']");
-            if (checkbox && !event.target.matches("input[type='checkbox']")) {
-                checkbox.checked = !checkbox.checked;
-                checkbox.dispatchEvent(new Event("change", { bubbles: true }));
-            }
-        });
+
+    _onRender(context, options) {
+        for (const group of this.element.querySelectorAll(".rncs-form-group")) {
+            group.addEventListener("click", (event) => {
+                if (event.target.closest("#rncs_NoteFromDM, label[for='rncs_NoteFromDM']")) return;
+                const checkbox = group.querySelector("input[type='checkbox']");
+                if (checkbox && !event.target.matches("input[type='checkbox']")) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+            });
+        }
     }
 }
 
-class RollAndDistributionMethodSettings extends FormApplication {
+class RollAndDistributionMethodSettings extends HandlebarsApplicationMixin(ApplicationV2) {
 
     AbilitiesRollMethod_choices = {// choices.# represents number of d6
         "3": game.i18n.localize("RNCS.settings.AbilitiesRollMethod.choices.3"),
@@ -457,18 +463,30 @@ class RollAndDistributionMethodSettings extends FormApplication {
         "point-buy-method": game.i18n.localize("RNCS.settings.DistributionMethod.choices.point-buy-method")
     }
 
-    static get defaultOptions() {
-        return foundry.utils.mergeObject(super.defaultOptions, {
-            id: "rncs-roll-dist-method",
-            title: "RNCS - " + game.i18n.localize("RNCS.settings.RollMethodAndDistribution.Name"),
-            template: "./modules/roll-new-character-stats/templates/form-apps/edit-roll-dist-method.hbs",
-            width: 500,
+    static DEFAULT_OPTIONS = {
+        id: "rncs-roll-dist-method",
+        classes: ["rncs-settings-form"],
+        tag: "form",
+        window: { title: "RNCS.settings.RollMethodAndDistribution.Name" },
+        position: { width: 500 },
+        form: {
+            handler: RollAndDistributionMethodSettings.#onSubmit,
             closeOnSubmit: true,
-            submitOnClose: false
-        })
+            submitOnChange: false
+        }
+    };
+
+    get title() {
+        return "RNCS - " + game.i18n.localize(this.options.window.title);
     }
 
-    async getData() {
+    static PARTS = {
+        body: {
+            template: "modules/roll-new-character-stats/templates/form-apps/edit-roll-dist-method.hbs"
+        }
+    };
+
+    async _prepareContext(options) {
         return {
             AbilitiesRollMethod_choices: this.AbilitiesRollMethod_choices,
             AbilitiesRollMethod_value: game.settings.get(settingsKey, "AbilitiesRollMethod"),
@@ -487,32 +505,31 @@ class RollAndDistributionMethodSettings extends FormApplication {
         }
     }
 
-    async _updateObject(event, formData) {
-        if (event.submitter.id !== "cancel") {
-            game.settings.set(settingsKey, "AbilitiesRollMethod", formData.rncs_AbilitiesRollMethod),
-                game.settings.set(settingsKey, "DropLowestDieRoll", formData.rncs_DropLowestDieRoll),
-                game.settings.set(settingsKey, "ReRollOnes", formData.rncs_ReRollOnes),
-                game.settings.set(settingsKey, "NumberOfSetsRolled", formData.rncs_NumberOfSetsRolled),
-                game.settings.set(settingsKey, "DropLowestSet", formData.rncs_DropLowestSet),
-                game.settings.set(settingsKey, "BonusPoints", formData.rncs_BonusPoints),
-                game.settings.set(settingsKey, "Over18Allowed", formData.rncs_Over18Allowed),
-                game.settings.set(settingsKey, "MinimumAbilityTotal", formData.rncs_MinimumAbilityTotal),
-                game.settings.set(settingsKey, "MaximumAbilityTotal", formData.rncs_MaximumAbilityTotal),
-                game.settings.set(settingsKey, "DistributionMethod", formData.rncs_DistributionMethod)
-        }
+    static async #onSubmit(event, form, formData) {
+        if (event.submitter?.id === "cancel") return;
+        const data = formData.object;
+        await game.settings.set(settingsKey, "AbilitiesRollMethod", data.rncs_AbilitiesRollMethod);
+        await game.settings.set(settingsKey, "DropLowestDieRoll", data.rncs_DropLowestDieRoll);
+        await game.settings.set(settingsKey, "ReRollOnes", data.rncs_ReRollOnes);
+        await game.settings.set(settingsKey, "NumberOfSetsRolled", data.rncs_NumberOfSetsRolled);
+        await game.settings.set(settingsKey, "DropLowestSet", data.rncs_DropLowestSet);
+        await game.settings.set(settingsKey, "BonusPoints", data.rncs_BonusPoints);
+        await game.settings.set(settingsKey, "Over18Allowed", data.rncs_Over18Allowed);
+        await game.settings.set(settingsKey, "MinimumAbilityTotal", data.rncs_MinimumAbilityTotal);
+        await game.settings.set(settingsKey, "MaximumAbilityTotal", data.rncs_MaximumAbilityTotal);
+        await game.settings.set(settingsKey, "DistributionMethod", data.rncs_DistributionMethod);
     }
-        activateListeners(html) {
-        super.activateListeners(html);
-        html.find(".rncs-form-group").on("click", (event) => {
-            // Skip if clicking the text input or its label
-            if (event.target.closest("#rncs_DistributionMethod, label[for='rncs_DistributionMethod']")) {
-                return;
-            }
-            const checkbox = event.currentTarget.querySelector("input[type='checkbox']");
-            if (checkbox && !event.target.matches("input[type='checkbox']")) {
-                checkbox.checked = !checkbox.checked;
-                checkbox.dispatchEvent(new Event("change", { bubbles: true }));
-            }
-        });
+
+    _onRender(context, options) {
+        for (const group of this.element.querySelectorAll(".rncs-form-group")) {
+            group.addEventListener("click", (event) => {
+                if (event.target.closest("#rncs_DistributionMethod, label[for='rncs_DistributionMethod']")) return;
+                const checkbox = group.querySelector("input[type='checkbox']");
+                if (checkbox && !event.target.matches("input[type='checkbox']")) {
+                    checkbox.checked = !checkbox.checked;
+                    checkbox.dispatchEvent(new Event("change", { bubbles: true }));
+                }
+            });
+        }
     }
 }

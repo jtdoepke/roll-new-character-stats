@@ -10,6 +10,7 @@ import osric_ActorHelper from "../helpers/osric-actor-helper.js";
 import fd_ActorHelper from "../helpers/fd-actor-helper.js";
 
 const game_system_helper = new GAME_SYSTEM_Helper();
+const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
 Hooks.on('renderConfigureActor', () => {
     // Add dragstart listeners for each result element
@@ -34,39 +35,47 @@ function dragstart_handler(ev) {
     ev.dataTransfer.dropEffect = "copy";
 }
 
-export class ConfigureActor extends FormApplication {
+export class ConfigureActor extends HandlebarsApplicationMixin(ApplicationV2) {
 
-    // Properties
-    _settings = new RegisteredSettings;
-
-    constructor(owner_id, final_results, bonus_points, other_properties_results, individual_rolls, Over18Allowed, DistributionMethod, HideResultsZone) {
-        super(); 
-        this.owner_id = owner_id,
-        this.final_results = final_results, 
-        this.bonus_points = bonus_points,
-        this.other_properties_results = other_properties_results,
-        this.individual_rolls = individual_rolls,
-        this.Over18Allowed = Over18Allowed,
-        this.DistributionMethod = DistributionMethod,
-        this.HideResultsZone = HideResultsZone
-    }
-
-    static get defaultOptions() {
-
-        return foundry.utils.mergeObject(super.defaultOptions, {
-            title: game.i18n.localize("RNCS.dialog.results-button.configure-new-actor"),
-            id: 'configure-actor',
-            template: "./modules/roll-new-character-stats/templates/form-apps/configure-actor.hbs",
-            height: 610, 
+    static DEFAULT_OPTIONS = {
+        id: "configure-actor",
+        tag: "form",
+        window: {
+            title: "RNCS.dialog.results-button.configure-new-actor"
+        },
+        position: {
             width: 375,
+            height: 610
+        },
+        form: {
+            handler: ConfigureActor.#onSubmit,
             closeOnSubmit: true,
-            submitOnClose: false
-        });
+            submitOnChange: false
+        }
+    };
+
+    static PARTS = {
+        body: {
+            template: "modules/roll-new-character-stats/templates/form-apps/configure-actor.hbs"
+        }
+    };
+
+    constructor({ owner_id, final_results, bonus_points, other_properties_results, individual_rolls, Over18Allowed, DistributionMethod, HideResultsZone } = {}) {
+        super({});
+        this.owner_id = owner_id;
+        this.final_results = final_results;
+        this.bonus_points = bonus_points;
+        this.other_properties_results = other_properties_results;
+        this.individual_rolls = individual_rolls;
+        this.Over18Allowed = Over18Allowed;
+        this.DistributionMethod = DistributionMethod;
+        this.HideResultsZone = HideResultsZone;
+        this._settings = new RegisteredSettings;
     }
 
     // Send data to Configure Actor form
-    async getData() {
-        
+    async _prepareContext(options) {
+
         // Use [game-system]-actor-handler class roll "other properties" to be displayed on form application.
         // these are only necessary if enhanced support is intended
         // let dnd5e_actor_helper = null;      // For future use
@@ -74,7 +83,7 @@ export class ConfigureActor extends FormApplication {
         // let ose_actor_helper = null;        // For future use
         // let archmage_actor_helper = null;   // For future use
         let dcc_actor_helper = null;
-        
+
         // Roll/Set "Other Properties"
         let character_name = "New Actor";
         let description = "";
@@ -85,7 +94,7 @@ export class ConfigureActor extends FormApplication {
         let currency_gp = 0;
         let currency_sp = 0;
         let currency_cp = 0;
-        
+
         switch (game.system.id) {
             case "dnd5e":
                 break;
@@ -103,11 +112,11 @@ export class ConfigureActor extends FormApplication {
 
                 // Actor document is not passed in at this time since one will not be created until player accepts the new actor
                 // other_properties_results contains the player's rolls for properties such as hp, occupation, equipment, luck etc.
-                dcc_actor_helper = new dcc_ActorHelper(null, this.other_properties_results, this.owner_id); 
+                dcc_actor_helper = new dcc_ActorHelper(null, this.other_properties_results, this.owner_id);
 
                 // Roll/Set common properties
-                hp_base = dcc_actor_helper._RollBaseHitPoints("1d4"); // default formula provided in case no other_properties_results provided 
-                hp_modifier_ability = dcc_actor_helper._hp_modifier_ability;          
+                hp_base = dcc_actor_helper._RollBaseHitPoints("1d4"); // default formula provided in case no other_properties_results provided
+                hp_modifier_ability = dcc_actor_helper._hp_modifier_ability;
                 currency_cp = dcc_actor_helper._RollStartingMoney("5d12","cp");  // default formula provided in case no other_properties_results provided
 
                 // Roll/Set system unique properties
@@ -122,7 +131,7 @@ export class ConfigureActor extends FormApplication {
 
                 // Get name
                 character_name = dcc_actor_helper._character_name;
-                
+
                 break;
             default:
         }
@@ -145,9 +154,9 @@ export class ConfigureActor extends FormApplication {
             // END Common Character data
 
             // BEGIN Game System Unique data
-            // dnd5e            
+            // dnd5e
             is_dnd5e: game.system.id === "dnd5e",
-            
+
             // pf1
             is_pf1: game.system.id === "pf1",
 
@@ -172,57 +181,62 @@ export class ConfigureActor extends FormApplication {
             dcc_farm_animal: dcc_actor_helper?.farm_animal,
             dcc_cart_content: dcc_actor_helper?.cart_content,
             dcc_equipment: dcc_actor_helper?.equipment,
-            dcc_luck: dcc_actor_helper?.luck,    
-            dcc_trade_weapon: dcc_actor_helper?.trade_weapon, 
-            dcc_trade_weapon_ammo: dcc_actor_helper?.trade_weapon_ammo,  
-            dcc_trade_weapon_ammo_qty: dcc_actor_helper?.trade_weapon_ammo_qty,             
-            // END Game System Unique data            
+            dcc_luck: dcc_actor_helper?.luck,
+            dcc_trade_weapon: dcc_actor_helper?.trade_weapon,
+            dcc_trade_weapon_ammo: dcc_actor_helper?.trade_weapon_ammo,
+            dcc_trade_weapon_ammo_qty: dcc_actor_helper?.trade_weapon_ammo_qty,
+            // END Game System Unique data
 
             // Async data
             abilities: await game_system_helper.getSystemAbilities(),
-            races: await game_system_helper.getSystemRaces()            
+            races: await game_system_helper.getSystemRaces()
         };
     }
-    
-    async _updateObject(event, formData) {
+
+    static async #onSubmit(event, form, formData) {
+
+        // Cancel button short-circuit (no actor should be created)
+        if (event.submitter?.id === "cancel") return;
 
         const owner = this.owner_id;
+        const data = formData.object;
+
         let actor = await Actor.create({
-            name: ((formData.character_name === "New Actor" || formData.character_name === "") && formData.select_race !== "" ? formData.select_race : formData.character_name),
-            permission: { [owner]: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER },
+            name: ((data.character_name === "New Actor" || data.character_name === "") && data.select_race !== "" ? data.select_race : data.character_name),
+            ownership: { [owner]: CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER },
             type: game_system_helper.getSystemActorType(),
             img: "icons/svg/mystery-man.svg"
         });
-        
+
         // Use [game-system]-actor-helper class to update actor
         switch (game.system.id) {
             case "dnd5e":
                 let dnd5e_actor_helper = new dnd5e_ActorHelper(actor);
-                dnd5e_actor_helper._Update(formData);
+                dnd5e_actor_helper._Update(data);
                 break;
             case "pf1":
                 let pf1_actor_helper = new pf1_ActorHelper(actor);
-                pf1_actor_helper._Update(formData);
+                pf1_actor_helper._Update(data);
                 break;
             case "ose":
                 let ose_actor_helper = new ose_ActorHelper(actor);
-                ose_actor_helper._Update(formData);
+                ose_actor_helper._Update(data);
                 break;
             case "archmage":
                 let archmage_actor_helper = new archmage_ActorHelper(actor);
-                archmage_actor_helper._Update(formData);
+                archmage_actor_helper._Update(data);
                 break;
             case "dcc":
                 let dcc_actor_helper = new dcc_ActorHelper(actor);
-                dcc_actor_helper._Update(formData);
+                dcc_actor_helper._Update(data);
                 break;
             case "osric":
                 let osric_actor_helper = new osric_ActorHelper(actor);
-                osric_actor_helper._Update(formData);
+                osric_actor_helper._Update(data);
                 break;
             case "fantastic-depths":
                 let fd_actor_helper = new fd_ActorHelper(actor);
-                fd_actor_helper._Update(formData);
+                fd_actor_helper._Update(data);
                 break;
             default:
         }
